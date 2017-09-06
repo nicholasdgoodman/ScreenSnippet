@@ -4,8 +4,11 @@ Screen snipping utility for Windows. Allows user to draw a rectangular region on
 Note: application requires .NET 3.5 framework (or higher).
 
 # Command line:
-ScreenSnippet.exe filename
+ScreenSnippet.exe [filename]
 (filename where the saved jpeg output will go)
+
+ScreenSnippet.exe [port] [uuid] [topic]
+Openfin Runtime port number, application UUID, and message topic to send Base64 encoded JPG image to.
 
 Application will abort snippet and close if esc is pressed.
 

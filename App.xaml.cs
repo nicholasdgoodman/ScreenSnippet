@@ -14,12 +14,28 @@ namespace ScreenSnippet
             if (e.Args.Length == 1 && !string.IsNullOrEmpty(e.Args[0]))
             {
                 string filename = e.Args[0];
-                SnippingWindow win = new SnippingWindow(filename);
+                var win = new SnippingWindow(filename);
+                win.Show();
+            }
+            // or Openfin port and app UUID
+            else if(e.Args.Length == 3 && !string.IsNullOrEmpty(e.Args[0]) && !string.IsNullOrEmpty(e.Args[1]) && !string.IsNullOrEmpty(e.Args[2]))
+            {
+                int port;
+
+                if(!int.TryParse(e.Args[0], out port) || port < 1 || port > 65535)
+                {
+                    throw new Exception("Invalid port number.");
+                }
+
+                var uuid = e.Args[1];
+                var topic = e.Args[2];
+
+                var win = new SnippingWindow(port, uuid, topic);
                 win.Show();
             }
             else
             {
-                throw new Exception("Missing filename command line argument.");
+                throw new Exception("Invalid command line arguments.");
             }
         }
     }

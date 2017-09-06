@@ -15,6 +15,7 @@
 //specific language governing permissions and limitations
 //under the License.
 
+using System;
 using System.IO;
 using System.Linq;
 using System.Windows;
@@ -24,6 +25,8 @@ using System.Windows.Forms;
 using System.Windows.Ink;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+
+using Fin = Openfin.Desktop;
 
 namespace Paragon.Plugins.ScreenCapture
 {
@@ -38,20 +41,45 @@ namespace Paragon.Plugins.ScreenCapture
         private DrawingAttributes selectedPenColor;
         private string outputFilename;
 
-        // outputFileName: write output screen capture to given file name  
-        public SnippingWindow(string outputFilename)
+        private Fin.Runtime openfinRuntime;
+        private string openfinUuid;
+        private string openfinTopic;
+
+        private SnippingWindow()
         {
             InitializeComponent();
 
-            this.outputFilename = outputFilename;
-
-            penColors = ((DrawingAttributes[]) FindResource("PenColors"));
-            highlightColors = ((DrawingAttributes[]) FindResource("HighlightColors"));
+            penColors = ((DrawingAttributes[])FindResource("PenColors"));
+            highlightColors = ((DrawingAttributes[])FindResource("HighlightColors"));
 
             selectedPenColor = penColors.First();
             selectedHighlightColor = highlightColors.First();
 
             Loaded += OnLoaded;
+        }
+
+        // outputFileName: write output screen capture to given file name  
+        public SnippingWindow(string outputFilename) : this()
+        {
+            this.outputFilename = outputFilename;
+        }
+
+        public SnippingWindow(int port, string uuid, string topic) : this()
+        {
+            
+            openfinUuid = uuid;
+            openfinTopic = topic;
+
+            var options = new Fin.RuntimeOptions()
+            {
+                UUID = null,
+                Port = port,
+                RuntimeConnectOptions = Fin.RuntimeConnectOptions.UseExternal,
+                PortDiscoveryMode = Fin.PortDiscoveryMode.None
+            };
+
+            openfinRuntime = Fin.Runtime.GetRuntimeInstance(options);
+            openfinRuntime.Connect(() => { });
         }
 
         private void OnLoaded(object sender, RoutedEventArgs e)
@@ -157,17 +185,36 @@ namespace Paragon.Plugins.ScreenCapture
 
                 renderTargetBitmap.Render(InkCanvas);
 
-                using (var fileStream = new FileStream(outputFilename, FileMode.Create))
+                using (var dataStream = new MemoryStream())
                 {
                     var jpegEncoder = new JpegBitmapEncoder();
                     jpegEncoder.QualityLevel = 70;
                     jpegEncoder.Frames.Add(BitmapFrame.Create(renderTargetBitmap));
-                    jpegEncoder.Save(fileStream);
+                    jpegEncoder.Save(dataStream);
+
+                    var dataBytes = dataStream.ToArray();
+
+                    if(outputFilename != null)
+                    {
+                        File.WriteAllBytes(outputFilename, dataBytes);
+                    }
+                    else
+                    {
+                        SendDataToOpenFin(dataBytes);
+                    }
                 }
             }
             finally
             {
-                Close();
+                if (outputFilename != null)
+                {
+                    Close();
+                }
+                else
+                {
+                    Visibility = Visibility.Hidden;
+                    openfinRuntime.Disconnected += (s, de) => Dispatcher.Invoke((Action) delegate { Close(); });
+                }
             }
 
         }
@@ -177,6 +224,15 @@ namespace Paragon.Plugins.ScreenCapture
             contextMenu.Placement = PlacementMode.Bottom;
             contextMenu.PlacementTarget = sender;
             contextMenu.IsOpen = true;
+        }
+
+        private void SendDataToOpenFin(byte[] dataBytes)
+        {
+            openfinRuntime.Connect(() =>
+            {
+                openfinRuntime.InterApplicationBus.Send(openfinUuid, openfinTopic, Convert.ToBase64String(dataBytes));
+                openfinRuntime.System.getVersion(ack => openfinRuntime.Disconnect(() => { }));
+            });
         }
     }
 }
